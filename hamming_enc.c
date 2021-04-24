@@ -8,7 +8,7 @@
 #define FALSE (0)
 #define CLOCK CLOCK_REALTIME
 
-bool encoded_data[13] = {0,0,0,1,0,1,0,0,0,0,1,0,0}; 
+char encoded_data[13] = {0,0,0,1,0,1,0,0,0,0,1,0,0}; 
 
 enum parity{
 	pW,
@@ -39,12 +39,15 @@ bool checkpowTwo(uint32_t parity){
 	return FALSE;	
 }
 
+
+// Calculate the XOR of the bits whose bit = parity position is 1 
+
 bool calculateParity(int parity){
 
 	int parityPos = 0;
 	bool calculateParity;
 
-	if(checkpowTwo(parity) || parity == 1)
+	if(checkpowTwo(parity) || parity == 1) // to make sure we only check the bit positions 1,2,4,,8,16...
 	{
 		parityPos = parityPos | parity;
 	}
@@ -52,10 +55,10 @@ bool calculateParity(int parity){
 	// data bits start at 3rd index
 	int first = 0;
 
-	for(int index = 3; index < END_POSITION; index++) // goes over array of the data
+	for(int index = 3; index < END_POSITION; index++) // goes over array of the data which starts at 3rd index
 	{
 		
-		if((index & parityPos) == parityPos && index != parity){ // if the bit location matches the parity (0,1,2,3)
+		if((index & parityPos) == parityPos && index != parity){ // if the bit location matches the parity (0,1,2,3) and the index is not the parity we are calculating
 			
 			if(first == 1){
 				calculateParity =  calculateParity ^ encoded_data[index];
@@ -79,9 +82,9 @@ void hamming_encode(){
 	// calculate parity
 	for(index = 1; index < END_POSITION; index++)
 	{
-		if(checkpowTwo(index) || index == 1){
+		if(checkpowTwo(index) || index == 1){ // to make sure the parity positions are 1,2,4,8,16...
 			//printf("index = %d \n",index);
-			encoded_data[index] = calculateParity(index);	
+			encoded_data[index] = calculateParity(index);	// Calculate the XOR of the data and store at p01(1),p02(2),p03(4)...
 		}
 	}
 
@@ -91,8 +94,6 @@ void hamming_encode(){
 		encoded_data[pW] ^= encoded_data[index];
 	}
 }
-
-
 
 struct timespec start,end;
 
