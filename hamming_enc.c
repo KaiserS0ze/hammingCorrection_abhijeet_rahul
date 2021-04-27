@@ -2,13 +2,15 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <time.h>
+#include <string.h>
 
 #define END_POSITION 13
 #define TRUE (1)
 #define FALSE (0)
 #define CLOCK CLOCK_REALTIME
 
-char encoded_data[13] = {0,0,0,1,0,1,0,0,0,0,1,0,0}; 
+char encoded_data[13] = {0,0,0,1,0,1,0,0,0,0,1,0,0};
+char received_data[13] = {0}; 
 
 enum parity{
 	pW,
@@ -19,6 +21,9 @@ enum parity{
 	p05,
 	p06
 };
+
+// check bits decoder
+bool check_bits[7] = {0}; // start from index 1 
 
 bool checkpowTwo(uint32_t parity){
 
@@ -42,7 +47,7 @@ bool checkpowTwo(uint32_t parity){
 
 // Calculate the XOR of the bits whose bit = parity position is 1 
 
-bool calculateParity(int parity){
+bool calculateParity(int parity, char data[]){
 
 	int parityPos = 0;
 	bool calculateParity;
@@ -61,10 +66,10 @@ bool calculateParity(int parity){
 		if((index & parityPos) == parityPos && index != parity){ // if the bit location matches the parity (0,1,2,3) and the index is not the parity we are calculating
 			
 			if(first == 1){
-				calculateParity =  calculateParity ^ encoded_data[index];
+				calculateParity =  calculateParity ^ data[index];
 			}
 			else{
-				calculateParity = encoded_data[index];
+				calculateParity = data[index];
 				first = 1;
 			}
 			
@@ -78,20 +83,77 @@ bool calculateParity(int parity){
 void hamming_encode(){
 	
 	int index = 0;
-	
+
+	encoded_data[pW] = encoded_data[p01];
 	// calculate parity
 	for(index = 1; index < END_POSITION; index++)
 	{
 		if(checkpowTwo(index) || index == 1){ // to make sure the parity positions are 1,2,4,8,16...
 			//printf("index = %d \n",index);
-			encoded_data[index] = calculateParity(index);	// Calculate the XOR of the data and store at p01(1),p02(2),p03(4)...
+			encoded_data[index] = calculateParity(index,encoded_data);	// Calculate the XOR of the data and store at p01(1),p02(2),p03(4)...
 		}
+
+		// calculate pW
+		encoded_data[pW] ^= encoded_data[index];
 	}
 
-	// calculate pW
-	encoded_data[pW] = encoded_data[p01]; 
-	for(index = 1; index < END_POSITION; index++){
-		encoded_data[pW] ^= encoded_data[index];
+	
+	 
+}
+
+void hamming_decode(){
+
+	bool CParity;
+	int Cindex = 1;
+	int bit_flipped = 0;
+	bool pw2 = received_data[p01];
+	// for all the indexes 
+	for(int index = 1; index < END_POSITION; index++)
+	{	
+		// calculate parity 
+		if(checkpowTwo(index) || index == 1){ // to make sure the parity positions are 1,2,4,8,16...
+			CParity = calculateParity(index,received_data);
+
+			// check if CParity == RParity			
+			
+			// if No --> corresponding check bit = 1
+			if(CParity ^ received_data[index]){	
+			 
+			// add the parity index positions 
+				check_bits[Cindex] = 1;
+				bit_flipped = bit_flipped + index;
+			}
+			else{
+				// if yes --> corresponding check bit = 0
+				check_bits[Cindex] = 0;
+			}
+
+			// sum all the check bits	
+			check_bits[0] += check_bits[Cindex]; 
+			Cindex++;
+		}
+		// calculate pW2
+		pw2 ^= received_data[index];
+	}	
+
+	// if sumOfCheckbits = 0 && pw2 = pw (NO ERRORS)
+	if(!check_bits[0] && pw2 == received_data[pW]){
+		printf("No Errors \n");	
+	}
+
+	// if sumOfCheckbits = 0 && pw2 != pw (parity word error)
+	if(!check_bits[0] && pw2 != received_data[pW]){
+		//printf("Parity Word error \n");
+		received_data[pW] = !received_data[pW];	
+	}
+	// if sumOfCheckbits != 0 && pw2 != pw (SBE)
+	if(check_bits[0] && pw2 != received_data[pW]){
+		//printf("Single Bit Error \n");
+		received_data[bit_flipped] = !received_data[bit_flipped];	
+	}
+	// if sumOfCheckbits != 0 && pw2 = pw (DBE)
+	if(check_bits[0] && pw2 == received_data[pW]){
+		printf("Double Bit Error \n");	
 	}
 }
 
@@ -106,11 +168,39 @@ int main(){
 
 	clock_gettime(CLOCK,&end);
 
-	printf("time = %ld \n ",end.tv_nsec - start.tv_nsec);
+	printf("Hamming encoder time = %ld \n ",end.tv_nsec - start.tv_nsec);
 
 	for(index = 0; index < END_POSITION; index++){
 		printf("[%d]",encoded_data[index]);
 	}
 
+	printf("\n");
+
+	memcpy(received_data,encoded_data,END_POSITION);
+	
+	// SBE
+	received_data[5] = 0;
+	// No error
+
+	// DBE 
+	 //received_data[5] = 0;
+	 //received_data[6] = 1;
+	
+	// PW error
+	//received_data[pW] = !encoded_data[pW];
+	
+	clock_gettime(CLOCK,&start);
+
+	hamming_decode();
+
+	clock_gettime(CLOCK,&end);
+
+	printf("Hamming decoder time = %ld \n ",end.tv_nsec - start.tv_nsec);
+	
+	for(index = 0; index < END_POSITION; index++){
+		printf("[%d]",received_data[index]);
+	}	
+
+	printf("\n");
 return 0;
 }
